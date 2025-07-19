@@ -8,7 +8,6 @@ import psycopg2
 import json
 from shapely.geometry import mapping
 
-
 def epsg_calc(lat, lon):
     try:
         # Validate input coordinates
@@ -151,15 +150,25 @@ def sociodemo_calc(bounding_poly):
   
     poly_geojson = json.dumps(mapping(bounding_poly))
 
-    # Connect to Supabase (Postgres)
     conn = psycopg2.connect(
+        dbname="georamicdb",      # your local DB name
+        user="pranik",            # your local postgres username (likely your macOS username)
+        password="",              
+        host="localhost",         
+        port="5432"               # default Postgres port
+    )
+    cursor = conn.cursor()
+
+
+    # Connect to Supabase (Postgres)
+    '''conn = psycopg2.connect(
         dbname="postgres",
         user="postgres",
         password="7fxL0xfuw9w6PfPd",
         host="db.fiuxnvanhbujhwdwygto.supabase.co",
         port="5432"
-    )
-    cursor = conn.cursor()
+    )'''
+    
 
     # PostGIS query: intersect and weight ACS data by area
     query = f"""
@@ -270,6 +279,11 @@ def main_calc(lat, lon, time_budget, mode, features_to_fetch):
     if not geojson_data.get("features"):
         raise ValueError("GeoJSON has no features")
     bounding_poly_geojson = geojson_data["features"][0]["geometry"]
+    #Edge within isochrone Calc
+    edges_within_isochrone = ox.graph_to_gdfs(subgraph, nodes=False, edges=True)
+    edges_within_polygon = gpd.clip(edges_within_isochrone, bounding_poly_proj)
+    edges_geom = edges_within_polygon[["geometry"]].to_crs(epsg=4326)
+    edges_geojson = json.loads(edges_geom.to_json())
 
     # Calculate feature proximities
     proximity_data = features_calc(lat, lon, bbox, epsg, bounding_poly_proj, features_to_fetch)
@@ -281,5 +295,6 @@ def main_calc(lat, lon, time_budget, mode, features_to_fetch):
     return {
         **proximity_data,
         **socio_demo_data,
-        "bounding_poly_geojson": bounding_poly_geojson
+        "bounding_poly_geojson": bounding_poly_geojson,
+        "edges": edges_geojson,
     }
